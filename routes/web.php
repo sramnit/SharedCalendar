@@ -13,6 +13,7 @@ use App\Http\Controllers\GraphicController;
 use App\Http\Controllers\HomeController;
 use App\Http\Controllers\InvoiceNinjaController;
 use App\Http\Controllers\MarketingController;
+use App\Http\Controllers\O365CalendarController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\RoleController;
 use App\Http\Controllers\StripeController;
@@ -122,6 +123,15 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/google-calendar/sync-event/{subdomain}/{eventId}', [GoogleCalendarController::class, 'syncEvent'])->name('google.calendar.sync_event');
     Route::delete('/google-calendar/unsync-event/{subdomain}/{eventId}', [GoogleCalendarController::class, 'unsyncEvent'])->name('google.calendar.unsync_event');
 
+    // O365 Calendar routes
+    Route::get('/o365-calendar/redirect', [O365CalendarController::class, 'redirect'])->name('o365.calendar.redirect');
+    Route::get('/o365-calendar/callback', [O365CalendarController::class, 'callback'])->name('o365.calendar.callback');
+    Route::get('/o365-calendar/disconnect', [O365CalendarController::class, 'disconnect'])->name('o365.calendar.disconnect');
+    Route::get('/o365-calendar/calendars', [O365CalendarController::class, 'getCalendars'])->name('o365.calendar.calendars');
+    Route::post('/o365-calendar/select-calendar/{subdomain}', [O365CalendarController::class, 'selectCalendar'])->name('o365.calendar.select_calendar');
+    Route::post('/o365-calendar/sync/{subdomain}', [O365CalendarController::class, 'sync'])->name('o365.calendar.sync');
+    Route::post('/o365-calendar/sync-event/{subdomain}/{eventId}', [O365CalendarController::class, 'syncEvent'])->name('o365.calendar.sync_event');
+
     // CalDAV routes
     Route::post('/caldav/test-connection', [CalDAVController::class, 'testConnection'])->name('caldav.test_connection')->middleware('throttle:10,1');
     Route::post('/caldav/discover-calendars', [CalDAVController::class, 'discoverCalendars'])->name('caldav.discover_calendars')->middleware('throttle:10,1');
@@ -212,6 +222,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::post('/admin/blog/generate-content', [BlogController::class, 'generateContent'])->name('blog.generate-content');
     });
 });
+
+// Public O365 Room Calendar routes (no authentication required)
+Route::get('/o365-calendar/dashboard', [O365CalendarController::class, 'showDashboard'])->name('o365.calendar.dashboard');
+Route::get('/o365-calendar/room/{roomEmail}', [O365CalendarController::class, 'showRoom'])->name('o365.calendar.room');
 
 Route::get('/tmp/event-image/{filename?}', function ($filename = null) {
     if (! $filename) {

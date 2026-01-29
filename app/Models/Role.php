@@ -78,6 +78,11 @@ class Role extends Model implements MustVerifyEmail
         'caldav_sync_direction',
         'caldav_sync_token',
         'caldav_last_sync_at',
+        'o365_calendar_id',
+        'o365_calendar_name',
+        'o365_webhook_subscription_id',
+        'o365_webhook_expires_at',
+        'o365_sync_direction',
         'slug_pattern',
     ];
 
@@ -88,6 +93,7 @@ class Role extends Model implements MustVerifyEmail
      */
     protected $casts = [
         'google_webhook_expires_at' => 'datetime',
+        'o365_webhook_expires_at' => 'datetime',
         'trial_ends_at' => 'datetime',
         'caldav_last_sync_at' => 'datetime',
         'event_custom_fields' => 'array',
@@ -1014,6 +1020,51 @@ class Role extends Model implements MustVerifyEmail
         return match ($this->sync_direction) {
             'to' => 'To Google Calendar',
             'from' => 'From Google Calendar',
+            'both' => 'Bidirectional Sync',
+            default => 'No Sync'
+        };
+    }
+
+    /**
+     * Returns the role's specific O365 calendar ID or primary
+     */
+    public function getO365CalendarId()
+    {
+        return $this->o365_calendar_id ?: 'primary';
+    }
+
+    /**
+     * Check if this role has O365 Calendar integration enabled
+     */
+    public function hasO365Settings(): bool
+    {
+        return ! is_null($this->o365_calendar_id);
+    }
+
+    /**
+     * Check if this role syncs to O365 Calendar
+     */
+    public function syncsToO365(): bool
+    {
+        return in_array($this->o365_sync_direction, ['to', 'both']);
+    }
+
+    /**
+     * Check if this role syncs from O365 Calendar
+     */
+    public function syncsFromO365(): bool
+    {
+        return in_array($this->o365_sync_direction, ['from', 'both']);
+    }
+
+    /**
+     * Get the O365 sync direction as a human-readable string
+     */
+    public function getO365SyncDirectionLabel()
+    {
+        return match ($this->o365_sync_direction) {
+            'to' => 'To O365 Calendar',
+            'from' => 'From O365 Calendar',
             'both' => 'Bidirectional Sync',
             default => 'No Sync'
         };

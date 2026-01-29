@@ -40,6 +40,11 @@ class User extends Authenticatable implements MustVerifyEmail
         'google_token',
         'google_refresh_token',
         'google_token_expires_at',
+        'microsoft_id',
+        'microsoft_token',
+        'microsoft_refresh_token',
+        'microsoft_token_expires_at',
+        'microsoft_calendar_id',
         'facebook_id',
         'facebook_token',
         'facebook_token_expires_at',
@@ -73,6 +78,9 @@ class User extends Authenticatable implements MustVerifyEmail
         'google_token',
         'google_refresh_token',
         'google_token_expires_at',
+        'microsoft_token',
+        'microsoft_refresh_token',
+        'microsoft_token_expires_at',
         'facebook_id',
         'facebook_token',
         'facebook_token_expires_at',
@@ -117,6 +125,7 @@ class User extends Authenticatable implements MustVerifyEmail
         return [
             'email_verified_at' => 'datetime',
             'google_token_expires_at' => 'datetime',
+            'microsoft_token_expires_at' => 'datetime',
             'facebook_token_expires_at' => 'datetime',
             'password' => 'hashed',
             'is_admin' => 'boolean',
@@ -303,6 +312,14 @@ class User extends Authenticatable implements MustVerifyEmail
     public function hasGoogleCalendarConnected(): bool
     {
         return ! is_null($this->google_token) && ! is_null($this->google_refresh_token);
+    }
+
+    /**
+     * Check if user has O365 Calendar connected
+     */
+    public function hasO365Connected(): bool
+    {
+        return ! is_null($this->microsoft_token) && ! is_null($this->microsoft_refresh_token);
     }
 
     /**

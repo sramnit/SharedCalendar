@@ -145,6 +145,13 @@ class Event extends Model
                 if ($role->syncsToCalDAV()) {
                     SyncEventToCalDAV::dispatchSync($event, $role, 'delete');
                 }
+
+                if ($role->syncsToO365()) {
+                    $user = $role->user;
+                    if ($user && $user->hasO365Connected()) {
+                        \App\Jobs\SyncEventToO365Calendar::dispatchSync($event, $role, 'delete');
+                    }
+                }
             }
         });
     }
@@ -946,6 +953,99 @@ class Event extends Model
         });
 
         return $role && $role->hasGoogleCalendarIntegration() && $role->syncsToGoogle();
+    }
+
+    /**
+     * Get O365 event ID for a specific role
+     */
+    public function getO365EventIdForRole($roleId)
+    {
+        $eventRole = $this->roles->first(function ($role) use ($roleId) {
+            return $role->id == $roleId;
+        });
+
+        return $eventRole ? $eventRole->pivot->o365_event_id : null;
+    }
+
+    /**
+     * Set O365 event ID for a specific role
+     *
+     * @return bool True if the pivot was updated, false if not found
+     */
+    public function setO365EventIdForRole($roleId, $o365EventId)
+    {
+        // Check if the pivot exists before updating
+        $exists = $this->roles()->where('roles.id', $roleId)->exists();
+        if (! $exists) {
+            \Log::warning('Cannot set O365 event ID: pivot record does not exist', [
+                'event_id' => $this->id,
+                'role_id' => $roleId,
+                'o365_event_id' => $o365EventId,
+            ]);
+
+            return false;
+        }
+
+        $this->roles()->updateExistingPivot($roleId, ['o365_event_id' => $o365EventId]);
+
+        return true;
+    }
+
+    /**
+     * Get O365 change key for a specific role
+     */
+    public function getO365ChangeKeyForRole($roleId)
+    {
+        $eventRole = $this->roles->first(function ($role) use ($roleId) {
+            return $role->id == $roleId;
+        });
+
+        return $eventRole ? $eventRole->pivot->o365_event_change_key : null;
+    }
+
+    /**
+     * Set O365 change key for a specific role
+     *
+     * @return bool True if the pivot was updated, false if not found
+     */
+    public function setO365ChangeKeyForRole($roleId, $changeKey)
+    {
+        $exists = $this->roles()->where('roles.id', $roleId)->exists();
+        if (! $exists) {
+            \Log::warning('Cannot set O365 change key: pivot record does not exist', [
+                'event_id' => $this->id,
+                'role_id' => $roleId,
+            ]);
+
+            return false;
+        }
+
+        $this->roles()->updateExistingPivot($roleId, ['o365_event_change_key' => $changeKey]);
+
+        return true;
+    }
+
+    /**
+     * Check if this event has an O365 event for a specific role
+     */
+    public function hasO365EventForRole($roleId): bool
+    {
+        return ! is_null($this->getO365EventIdForRole($roleId));
+    }
+
+    /**
+     * Sync this event to O365 Calendar for all connected users
+     */
+    public function syncToO365Calendar($action = 'create')
+    {
+        foreach ($this->roles as $role) {
+            if ($role->syncsToO365()) {
+                $user = $role->user;
+                if ($user && $user->hasO365Connected()) {
+                    \App\Jobs\SyncEventToO365Calendar::dispatchSync($this, $role, $action);
+                }
+            }
+        }
     }
 
     /**
