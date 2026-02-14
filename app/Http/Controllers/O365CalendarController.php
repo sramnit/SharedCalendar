@@ -353,6 +353,12 @@ class O365CalendarController extends Controller
             ];
         }
 
+        $batchSize = (int) $request->get('batch_size', (int) env('O365_DASHBOARD_BATCH_SIZE', 6));
+        $batchSize = max(1, min(20, $batchSize));
+        $batch = max(1, (int) $request->get('batch', 1));
+        $offset = ($batch - 1) * $batchSize;
+        $roomEmails = array_slice($roomEmails, $offset, $batchSize);
+
         $rooms = [];
         foreach ($roomEmails as $roomEmail) {
             try {

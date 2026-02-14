@@ -17,6 +17,8 @@ class O365CalendarService
     protected $tenantId;
     protected $redirectUri;
     protected $eventRepo;
+    protected $appAccessToken;
+    protected $appAccessTokenExpiresAt;
 
     public function __construct(EventRepo $eventRepo)
     {
@@ -50,7 +52,7 @@ class O365CalendarService
     public function getAccessToken(string $code): array
     {
         try {
-            $response = Http::asForm()->post(
+            $response = $this->httpClient()->asForm()->post(
                 "https://login.microsoftonline.com/{$this->tenantId}/oauth2/v2.0/token",
                 [
                     'client_id' => $this->clientId,
@@ -88,7 +90,7 @@ class O365CalendarService
     public function refreshAccessToken(string $refreshToken): array
     {
         try {
-            $response = Http::asForm()->post(
+            $response = $this->httpClient()->asForm()->post(
                 "https://login.microsoftonline.com/{$this->tenantId}/oauth2/v2.0/token",
                 [
                     'client_id' => $this->clientId,
@@ -245,7 +247,8 @@ class O365CalendarService
     {
         try {
             // For room calendars, we need to use application permissions
-            $response = Http::withToken($this->getAppAccessToken())
+            $response = $this->httpClient()
+                ->withToken($this->getAppAccessToken())
                 ->get("https://graph.microsoft.com/v1.0/users/{$roomEmail}/calendar");
 
             if ($response->successful()) {
@@ -285,7 +288,8 @@ class O365CalendarService
             $start = $startDate ? $startDate->format('Y-m-d\TH:i:s\Z') : now()->startOfDay()->format('Y-m-d\TH:i:s\Z');
             $end = $endDate ? $endDate->format('Y-m-d\TH:i:s\Z') : now()->addDays(30)->endOfDay()->format('Y-m-d\TH:i:s\Z');
 
-            $response = Http::withToken($this->getAppAccessToken())
+            $response = $this->httpClient()
+                ->withToken($this->getAppAccessToken())
                 ->get("https://graph.microsoft.com/v1.0/users/{$roomEmail}/calendar/calendarView", [
                     'startDateTime' => $start,
                     'endDateTime' => $end,
@@ -321,11 +325,17 @@ class O365CalendarService
     protected function getAppAccessToken(): string
     {
         try {
+            if ($this->appAccessToken && $this->appAccessTokenExpiresAt) {
+                if (now()->lt($this->appAccessTokenExpiresAt)) {
+                    return $this->appAccessToken;
+                }
+            }
+
             $tenantId = config('services.microsoft.tenant_id');
             $clientId = config('services.microsoft.client_id');
             $clientSecret = config('services.microsoft.client_secret');
 
-            $response = Http::asForm()->post(
+            $response = $this->httpClient()->asForm()->post(
                 "https://login.microsoftonline.com/{$tenantId}/oauth2/v2.0/token",
                 [
                     'client_id' => $clientId,
@@ -336,7 +346,12 @@ class O365CalendarService
             );
 
             if ($response->successful()) {
-                return $response->json()['access_token'];
+                $payload = $response->json();
+                $this->appAccessToken = $payload['access_token'];
+                $expiresIn = $payload['expires_in'] ?? 3600;
+                $this->appAccessTokenExpiresAt = now()->addSeconds($expiresIn)->subMinute();
+
+                return $this->appAccessToken;
             }
 
             Log::error('Failed to get app access token', [
@@ -353,6 +368,11 @@ class O365CalendarService
 
             throw $e;
         }
+    }
+
+    protected function httpClient()
+    {
+        return Http::timeout(10)->retry(1, 200);
     }
 
     /**
