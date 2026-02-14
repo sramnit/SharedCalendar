@@ -354,6 +354,15 @@ class O365CalendarService
                     continue;
                 }
 
+                if ($response instanceof \Illuminate\Http\Client\ConnectionException) {
+                    Log::error('Connection error fetching O365 room calendar events (batch)', [
+                        'room_email' => $roomEmail,
+                        'error' => $response->getMessage(),
+                    ]);
+                    $results[$roomEmail] = ['events' => [], 'error' => 'Connection error'];
+                    continue;
+                }
+
                 if ($response->successful()) {
                     $results[$roomEmail] = ['events' => $response->json()['value'] ?? []];
                     continue;
