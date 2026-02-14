@@ -7,6 +7,7 @@ use App\Models\Role;
 use App\Models\User;
 use App\Repos\EventRepo;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Http\Client\Pool;
@@ -328,12 +329,29 @@ class O365CalendarService
         $end = $endDate ? $endDate->format('Y-m-d\TH:i:s\Z') : now()->addDays(30)->endOfDay()->format('Y-m-d\TH:i:s\Z');
 
         $results = [];
+        $roomsToFetch = [];
+        $cacheSeconds = (int) env('O365_DASHBOARD_CACHE_SECONDS', 60);
 
         try {
+            foreach ($roomEmails as $roomEmail) {
+                $cacheKey = $this->roomEventsCacheKey($roomEmail, $start, $end);
+                $cached = Cache::get($cacheKey);
+                if (is_array($cached)) {
+                    $results[$roomEmail] = ['events' => $cached];
+                    continue;
+                }
+
+                $roomsToFetch[] = $roomEmail;
+            }
+
+            if (empty($roomsToFetch)) {
+                return $results;
+            }
+
             $token = $this->getAppAccessToken();
 
-            $responses = Http::pool(function (Pool $pool) use ($roomEmails, $token, $start, $end) {
-                foreach ($roomEmails as $roomEmail) {
+            $responses = Http::pool(function (Pool $pool) use ($roomsToFetch, $token, $start, $end) {
+                foreach ($roomsToFetch as $roomEmail) {
                     $pool
                         ->as($roomEmail)
                         ->withToken($token)
@@ -347,7 +365,7 @@ class O365CalendarService
                 }
             });
 
-            foreach ($roomEmails as $roomEmail) {
+            foreach ($roomsToFetch as $roomEmail) {
                 $response = $responses[$roomEmail] ?? null;
                 if (! $response) {
                     $results[$roomEmail] = ['events' => [], 'error' => 'No response'];
@@ -364,7 +382,9 @@ class O365CalendarService
                 }
 
                 if ($response->successful()) {
-                    $results[$roomEmail] = ['events' => $response->json()['value'] ?? []];
+                    $events = $response->json()['value'] ?? [];
+                    $results[$roomEmail] = ['events' => $events];
+                    Cache::put($this->roomEventsCacheKey($roomEmail, $start, $end), $events, now()->addSeconds($cacheSeconds));
                     continue;
                 }
 
@@ -387,6 +407,11 @@ class O365CalendarService
         }
 
         return $results;
+    }
+
+    protected function roomEventsCacheKey(string $roomEmail, string $start, string $end): string
+    {
+        return 'o365_room_events:' . md5(strtolower($roomEmail) . '|' . $start . '|' . $end);
     }
 
     /**
