@@ -409,6 +409,42 @@ class O365CalendarService
         return $results;
     }
 
+    /**
+     * Accept a tentative room event via app-only permissions.
+     */
+    public function acceptRoomEvent(string $roomEmail, string $eventId): bool
+    {
+        try {
+            $response = $this->httpClient()
+                ->withToken($this->getAppAccessToken())
+                ->post("https://graph.microsoft.com/v1.0/users/{$roomEmail}/events/{$eventId}/accept", [
+                    'comment' => 'Accepted via room dashboard',
+                    'sendResponse' => true,
+                ]);
+
+            if ($response->successful()) {
+                return true;
+            }
+
+            Log::error('Failed to accept O365 room event', [
+                'room_email' => $roomEmail,
+                'event_id' => $eventId,
+                'status' => $response->status(),
+                'body' => $response->body(),
+            ]);
+
+            return false;
+        } catch (\Exception $e) {
+            Log::error('Exception accepting O365 room event', [
+                'room_email' => $roomEmail,
+                'event_id' => $eventId,
+                'error' => $e->getMessage(),
+            ]);
+
+            return false;
+        }
+    }
+
     protected function roomEventsCacheKey(string $roomEmail, string $start, string $end): string
     {
         return 'o365_room_events:' . md5(strtolower($roomEmail) . '|' . $start . '|' . $end);

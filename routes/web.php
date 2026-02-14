@@ -232,6 +232,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
 // Public O365 Room Calendar routes (no authentication required)
 Route::get('/o365-calendar/dashboard', [O365CalendarController::class, 'showDashboard'])->name('o365.calendar.dashboard');
 Route::get('/o365-calendar/room/{roomEmail}', [O365CalendarController::class, 'showRoom'])->name('o365.calendar.room');
+Route::post('/o365-calendar/rooms/{roomEmail}/events/{eventId}/accept', [O365CalendarController::class, 'acceptRoomEvent'])
+    ->name('o365.calendar.room.accept')
+    ->middleware('throttle:20,1');
 
 Route::get('/tmp/event-image/{filename?}', function ($filename = null) {
     if (! $filename) {

@@ -421,6 +421,20 @@ class O365CalendarController extends Controller
     }
 
     /**
+     * Accept a tentative room event from the public dashboard.
+     */
+    public function acceptRoomEvent(Request $request, string $roomEmail, string $eventId): RedirectResponse
+    {
+        $accepted = $this->o365CalendarService->acceptRoomEvent($roomEmail, $eventId);
+
+        if ($accepted) {
+            return redirect()->back()->with('message', 'Event accepted.');
+        }
+
+        return redirect()->back()->with('error', 'Failed to accept event.');
+    }
+
+    /**
      * Get a specific distribution list
      */
     public function distributionListDetails(string $groupId): JsonResponse

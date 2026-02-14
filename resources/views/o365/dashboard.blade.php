@@ -156,10 +156,45 @@
             font-size: 5.625px;
             margin: 8px;
         }
+        .flash-message {
+            margin: 6px 0;
+            padding: 6px 8px;
+            border-radius: 3px;
+            font-size: 7px;
+        }
+        .flash-message.success {
+            background: #ecfdf5;
+            color: #047857;
+            border: 1px solid #a7f3d0;
+        }
+        .flash-message.error {
+            background: #fef2f2;
+            color: #991b1b;
+            border: 1px solid #fecaca;
+        }
+        .accept-form {
+            margin-top: 3px;
+        }
+        .accept-btn {
+            background: #10b981;
+            color: #fff;
+            border: none;
+            border-radius: 2px;
+            font-size: 6.5px;
+            padding: 2px 6px;
+            cursor: pointer;
+        }
+        .accept-btn:hover { background: #0f9b70; }
     </style>
 </head>
 <body>
     <div class="container">
+        @if(session('message'))
+            <div class="flash-message success">{{ session('message') }}</div>
+        @endif
+        @if(session('error'))
+            <div class="flash-message error">{{ session('error') }}</div>
+        @endif
         <div class="dashboard-header">
             <div class="left-section">
                 <img src="{{ asset('images/den_logo.jpg') }}" alt="DEN" class="logo">
@@ -228,6 +263,13 @@
                                                 • {{ count($event['attendees']) }} attendees
                                             @endif
                                         </div>
+                                    @endif
+
+                                    @if($status === 'tentative')
+                                        <form class="accept-form" method="POST" action="{{ route('o365.calendar.room.accept', ['roomEmail' => $roomData['email'], 'eventId' => $event['id']]) }}">
+                                            @csrf
+                                            <button type="submit" class="accept-btn">Accept</button>
+                                        </form>
                                     @endif
                                 </div>
                             @endforeach
