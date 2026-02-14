@@ -131,6 +131,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/o365-calendar/select-calendar/{subdomain}', [O365CalendarController::class, 'selectCalendar'])->name('o365.calendar.select_calendar');
     Route::post('/o365-calendar/sync/{subdomain}', [O365CalendarController::class, 'sync'])->name('o365.calendar.sync');
     Route::post('/o365-calendar/sync-event/{subdomain}/{eventId}', [O365CalendarController::class, 'syncEvent'])->name('o365.calendar.sync_event');
+    
+    // O365 Distribution Lists routes
+    Route::get('/o365-distribution-lists', [O365CalendarController::class, 'distributionLists'])->name('o365.distribution_lists');
+    Route::get('/o365-distribution-lists/json', [O365CalendarController::class, 'distributionListsJson'])->name('o365.distribution_lists.json');
+    Route::get('/o365-distribution-lists/{groupId}', [O365CalendarController::class, 'distributionListDetails'])->name('o365.distribution_list.details');
+
 
     // CalDAV routes
     Route::post('/caldav/test-connection', [CalDAVController::class, 'testConnection'])->name('caldav.test_connection')->middleware('throttle:10,1');

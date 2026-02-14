@@ -175,7 +175,7 @@
             @foreach($rooms as $roomData)
                 <div class="room-card">
                     <div class="room-header">
-                        <h2>{{ $roomData['room']['owner']['name'] ?? $roomData['room']['name'] ?? 'Unknown Room' }}</h2>
+                        <h2>{{ $roomData['display_name'] ?? $roomData['room']['owner']['name'] ?? $roomData['room']['name'] ?? 'Unknown Room' }}</h2>
                         <p>{{ $roomData['email'] }}</p>
                         <div class="status">
                             @if(isset($roomData['error']))

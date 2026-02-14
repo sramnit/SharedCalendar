@@ -322,10 +322,35 @@ class O365CalendarController extends Controller
      */
     public function showDashboard(Request $request)
     {
-        $roomEmails = $request->get('rooms', 'room.mexicocity@flydenver.com,Room.Dublin@flydenver.com,Room.PressRoom@flydenver.com,Room.Cancun@flydenver.com,Room.Tokyo@flydenver.com,Room.London@flydenver.com,Room.Paris@flydenver.com,Room.Sydney@flydenver.com,Room.Berlin@flydenver.com,Room.Madrid@flydenver.com,Room.Rome@flydenver.com,Room.Amsterdam@flydenver.com,Room.Vienna@flydenver.com,Room.Brussels@flydenver.com,Room.Copenhagen@flydenver.com,Room.Stockholm@flydenver.com');
-        
-        if (is_string($roomEmails)) {
-            $roomEmails = array_map('trim', explode(',', $roomEmails));
+        $roomConfig = config('o365_rooms.rooms', []);
+        $roomLookup = [];
+
+        foreach ($roomConfig as $room) {
+            if (is_string($room)) {
+                $roomLookup[strtolower($room)] = ['email' => $room];
+                continue;
+            }
+
+            if (! empty($room['email'])) {
+                $roomLookup[strtolower($room['email'])] = $room;
+            }
+        }
+
+        $roomEmails = $request->get('rooms');
+
+        if ($roomEmails) {
+            if (is_string($roomEmails)) {
+                $roomEmails = array_map('trim', explode(',', $roomEmails));
+            }
+        } elseif (! empty($roomLookup)) {
+            $roomEmails = array_values(array_map(static fn ($room) => $room['email'], $roomLookup));
+        } else {
+            $roomEmails = [
+                'room.mexicocity@flydenver.com',
+                'Room.Dublin@flydenver.com',
+                'Room.PressRoom@flydenver.com',
+                'Room.Cancun@flydenver.com',
+            ];
         }
 
         $rooms = [];
@@ -334,26 +359,93 @@ class O365CalendarController extends Controller
                 $room = $this->o365CalendarService->getRoomCalendar($roomEmail);
                 $events = $this->o365CalendarService->getRoomCalendarEvents($roomEmail);
                 
+                $roomMeta = $roomLookup[strtolower($roomEmail)] ?? null;
+
                 $rooms[] = [
                     'email' => $roomEmail,
                     'room' => $room,
                     'events' => $events,
+                    'display_name' => $roomMeta['role_name'] ?? $roomMeta['display_name'] ?? null,
                 ];
             } catch (\Exception $e) {
                 Log::error('Failed to fetch room calendar for dashboard', [
                     'room_email' => $roomEmail,
                     'error' => $e->getMessage(),
                 ]);
-                
+                $roomMeta = $roomLookup[strtolower($roomEmail)] ?? null;
+
                 $rooms[] = [
                     'email' => $roomEmail,
                     'room' => ['name' => $roomEmail, 'email' => $roomEmail],
                     'events' => [],
                     'error' => $e->getMessage(),
+                    'display_name' => $roomMeta['role_name'] ?? $roomMeta['display_name'] ?? null,
                 ];
             }
         }
 
         return view('o365.dashboard', compact('rooms'));
+    }
+
+    /**
+     * Get all distribution lists
+     */
+    public function distributionLists(): mixed
+    {
+        $user = Auth::user();
+
+        if (!$user || !$user->hasO365Connected()) {
+            return redirect()->to(route('profile.edit').'#section-o365-calendar')
+                ->with('error', 'Please connect your Office 365 account first.');
+        }
+
+        $distributionLists = $this->o365CalendarService->getDistributionLists($user);
+
+        if ($distributionLists === null) {
+            return redirect()->to(route('profile.edit').'#section-o365-calendar')
+                ->with('error', 'Failed to fetch distribution lists. Please try reconnecting your account.');
+        }
+
+        return view('o365.distribution-lists', compact('distributionLists'));
+    }
+
+    /**
+     * Get distribution lists as JSON
+     */
+    public function distributionListsJson(): JsonResponse
+    {
+        $user = Auth::user();
+
+        if (!$user || !$user->hasO365Connected()) {
+            return response()->json(['error' => 'O365 Calendar not connected'], 400);
+        }
+
+        $distributionLists = $this->o365CalendarService->getDistributionLists($user);
+
+        if ($distributionLists === null) {
+            return response()->json(['error' => 'Failed to fetch distribution lists'], 500);
+        }
+
+        return response()->json(['distribution_lists' => $distributionLists]);
+    }
+
+    /**
+     * Get a specific distribution list
+     */
+    public function distributionListDetails(string $groupId): JsonResponse
+    {
+        $user = Auth::user();
+
+        if (!$user || !$user->hasO365Connected()) {
+            return response()->json(['error' => 'O365 Calendar not connected'], 400);
+        }
+
+        $distributionList = $this->o365CalendarService->getDistributionList($user, $groupId);
+
+        if ($distributionList === null) {
+            return response()->json(['error' => 'Failed to fetch distribution list'], 500);
+        }
+
+        return response()->json(['distribution_list' => $distributionList]);
     }
 }

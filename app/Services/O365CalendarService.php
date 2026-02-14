@@ -37,7 +37,7 @@ class O365CalendarService
             'response_type' => 'code',
             'redirect_uri' => $this->redirectUri,
             'response_mode' => 'query',
-            'scope' => 'openid profile email offline_access Calendars.ReadWrite User.Read',
+            'scope' => 'openid profile email offline_access Calendars.ReadWrite User.Read Group.Read.All',
             'prompt' => 'consent',
         ];
 
@@ -590,5 +590,133 @@ class O365CalendarService
         }
 
         return $results;
+    }
+
+    /**
+     * Get all distribution lists (groups) with details
+     * 
+     * @param User $user
+     * @return array|null Array of distribution lists with name, member count, last modified date, etc.
+     */
+    public function getDistributionLists(User $user): ?array
+    {
+        if (!$this->refreshTokenIfNeeded($user)) {
+            Log::error('Failed to refresh O365 token for distribution lists', [
+                'user_id' => $user->id,
+            ]);
+            return null;
+        }
+
+        try {
+            // Fetch groups from Microsoft Graph API
+            // Using $select to get specific fields we need
+            $response = Http::withToken($user->microsoft_token)
+                ->get('https://graph.microsoft.com/v1.0/groups', [
+                    '$select' => 'id,displayName,mail,createdDateTime,renewedDateTime,groupTypes',
+                    '$filter' => "mailEnabled eq true and securityEnabled eq false",
+                    '$orderby' => 'displayName'
+                ]);
+
+            if (!$response->successful()) {
+                Log::error('Failed to fetch distribution lists from O365', [
+                    'status' => $response->status(),
+                    'body' => $response->body(),
+                ]);
+                return null;
+            }
+
+            $groups = $response->json()['value'] ?? [];
+            $distributionLists = [];
+
+            foreach ($groups as $group) {
+                // Get member count for each group
+                $memberCountResponse = Http::withToken($user->microsoft_token)
+                    ->get("https://graph.microsoft.com/v1.0/groups/{$group['id']}/members/\$count");
+
+                $memberCount = $memberCountResponse->successful() ? (int)$memberCountResponse->body() : 0;
+
+                // Get last used date from recent activity (if available)
+                // Note: This requires additional API calls and permissions
+                $lastUsed = null;
+
+                $distributionLists[] = [
+                    'id' => $group['id'],
+                    'name' => $group['displayName'],
+                    'email' => $group['mail'] ?? 'N/A',
+                    'created_date' => isset($group['createdDateTime']) 
+                        ? Carbon::parse($group['createdDateTime'])->format('Y-m-d H:i:s') 
+                        : null,
+                    'last_modified_date' => isset($group['renewedDateTime']) 
+                        ? Carbon::parse($group['renewedDateTime'])->format('Y-m-d H:i:s') 
+                        : (isset($group['createdDateTime']) ? Carbon::parse($group['createdDateTime'])->format('Y-m-d H:i:s') : null),
+                    'member_count' => $memberCount,
+                    'last_used' => $lastUsed,
+                    'group_types' => $group['groupTypes'] ?? [],
+                ];
+            }
+
+            return $distributionLists;
+
+        } catch (\Exception $e) {
+            Log::error('Exception fetching distribution lists', [
+                'user_id' => $user->id,
+                'error' => $e->getMessage(),
+            ]);
+            return null;
+        }
+    }
+
+    /**
+     * Get a specific distribution list with detailed information
+     * 
+     * @param User $user
+     * @param string $groupId
+     * @return array|null
+     */
+    public function getDistributionList(User $user, string $groupId): ?array
+    {
+        if (!$this->refreshTokenIfNeeded($user)) {
+            return null;
+        }
+
+        try {
+            // Get group details
+            $groupResponse = Http::withToken($user->microsoft_token)
+                ->get("https://graph.microsoft.com/v1.0/groups/{$groupId}");
+
+            if (!$groupResponse->successful()) {
+                return null;
+            }
+
+            $group = $groupResponse->json();
+
+            // Get members
+            $membersResponse = Http::withToken($user->microsoft_token)
+                ->get("https://graph.microsoft.com/v1.0/groups/{$groupId}/members");
+
+            $members = $membersResponse->successful() ? $membersResponse->json()['value'] ?? [] : [];
+
+            return [
+                'id' => $group['id'],
+                'name' => $group['displayName'],
+                'email' => $group['mail'] ?? 'N/A',
+                'description' => $group['description'] ?? '',
+                'created_date' => isset($group['createdDateTime']) 
+                    ? Carbon::parse($group['createdDateTime'])->format('Y-m-d H:i:s') 
+                    : null,
+                'last_modified_date' => isset($group['renewedDateTime']) 
+                    ? Carbon::parse($group['renewedDateTime'])->format('Y-m-d H:i:s') 
+                    : null,
+                'member_count' => count($members),
+                'members' => $members,
+            ];
+
+        } catch (\Exception $e) {
+            Log::error('Exception fetching distribution list details', [
+                'group_id' => $groupId,
+                'error' => $e->getMessage(),
+            ]);
+            return null;
+        }
     }
 }
