@@ -9,6 +9,7 @@ use App\Repos\EventRepo;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Http\Client\Pool;
 
 class O365CalendarService
 {
@@ -316,6 +317,67 @@ class O365CalendarService
 
             return [];
         }
+    }
+
+    /**
+     * Get room calendar events in parallel for a batch of rooms.
+     */
+    public function getRoomCalendarEventsBatch(array $roomEmails, ?\DateTimeInterface $startDate = null, ?\DateTimeInterface $endDate = null): array
+    {
+        $start = $startDate ? $startDate->format('Y-m-d\TH:i:s\Z') : now()->startOfDay()->format('Y-m-d\TH:i:s\Z');
+        $end = $endDate ? $endDate->format('Y-m-d\TH:i:s\Z') : now()->addDays(30)->endOfDay()->format('Y-m-d\TH:i:s\Z');
+
+        $results = [];
+
+        try {
+            $token = $this->getAppAccessToken();
+
+            $responses = Http::pool(function (Pool $pool) use ($roomEmails, $token, $start, $end) {
+                foreach ($roomEmails as $roomEmail) {
+                    $pool
+                        ->as($roomEmail)
+                        ->withToken($token)
+                        ->timeout(10)
+                        ->retry(1, 200)
+                        ->get("https://graph.microsoft.com/v1.0/users/{$roomEmail}/calendar/calendarView", [
+                            'startDateTime' => $start,
+                            'endDateTime' => $end,
+                            '$orderby' => 'start/dateTime',
+                        ]);
+                }
+            });
+
+            foreach ($roomEmails as $roomEmail) {
+                $response = $responses[$roomEmail] ?? null;
+                if (! $response) {
+                    $results[$roomEmail] = ['events' => [], 'error' => 'No response'];
+                    continue;
+                }
+
+                if ($response->successful()) {
+                    $results[$roomEmail] = ['events' => $response->json()['value'] ?? []];
+                    continue;
+                }
+
+                Log::error('Failed to get O365 room calendar events (batch)', [
+                    'room_email' => $roomEmail,
+                    'status' => $response->status(),
+                    'body' => $response->body(),
+                ]);
+
+                $results[$roomEmail] = ['events' => [], 'error' => 'Failed to fetch events'];
+            }
+        } catch (\Exception $e) {
+            Log::error('Exception getting O365 room calendar events (batch)', [
+                'error' => $e->getMessage(),
+            ]);
+
+            foreach ($roomEmails as $roomEmail) {
+                $results[$roomEmail] = ['events' => [], 'error' => $e->getMessage()];
+            }
+        }
+
+        return $results;
     }
 
     /**

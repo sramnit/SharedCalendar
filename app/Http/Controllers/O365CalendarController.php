@@ -360,34 +360,19 @@ class O365CalendarController extends Controller
         $roomEmails = array_slice($roomEmails, $offset, $batchSize);
 
         $rooms = [];
+        $batchResults = $this->o365CalendarService->getRoomCalendarEventsBatch($roomEmails);
+
         foreach ($roomEmails as $roomEmail) {
-            try {
-                $room = $this->o365CalendarService->getRoomCalendar($roomEmail);
-                $events = $this->o365CalendarService->getRoomCalendarEvents($roomEmail);
-                
-                $roomMeta = $roomLookup[strtolower($roomEmail)] ?? null;
+            $roomMeta = $roomLookup[strtolower($roomEmail)] ?? null;
+            $result = $batchResults[$roomEmail] ?? ['events' => [], 'error' => 'No response'];
 
-                $rooms[] = [
-                    'email' => $roomEmail,
-                    'room' => $room,
-                    'events' => $events,
-                    'display_name' => $roomMeta['role_name'] ?? $roomMeta['display_name'] ?? null,
-                ];
-            } catch (\Exception $e) {
-                Log::error('Failed to fetch room calendar for dashboard', [
-                    'room_email' => $roomEmail,
-                    'error' => $e->getMessage(),
-                ]);
-                $roomMeta = $roomLookup[strtolower($roomEmail)] ?? null;
-
-                $rooms[] = [
-                    'email' => $roomEmail,
-                    'room' => ['name' => $roomEmail, 'email' => $roomEmail],
-                    'events' => [],
-                    'error' => $e->getMessage(),
-                    'display_name' => $roomMeta['role_name'] ?? $roomMeta['display_name'] ?? null,
-                ];
-            }
+            $rooms[] = [
+                'email' => $roomEmail,
+                'room' => ['name' => $roomEmail, 'email' => $roomEmail],
+                'events' => $result['events'] ?? [],
+                'error' => $result['error'] ?? null,
+                'display_name' => $roomMeta['role_name'] ?? $roomMeta['display_name'] ?? null,
+            ];
         }
 
         return view('o365.dashboard', compact('rooms'));
